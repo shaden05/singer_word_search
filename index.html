@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Melodica - Singer Word Search Challenge</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .no-scroll {
+            touch-action: none;
+        }
+
+        .grid-cell {
+            aspect-ratio: 1;
+            transition: all 0.15s ease;
+        }
+
+        .grid-cell.selected {
+            background-color: #ec4899 !important;
+            color: #ffffff !important;
+            transform: scale(0.95);
+            border-radius: 0.375rem;
+            box-shadow: 0 0 10px rgba(236, 72, 153, 0.6);
+        }
+
+        .grid-cell.found {
+            animation: pulse-found 0.4s ease-out;
+        }
+
+        .grid-cell.hint-pulse {
+            animation: hint-glow 0.8s infinite alternate;
+        }
+
+        @keyframes pulse-found {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes hint-glow {
+            from { background-color: #0284c7; color: white; transform: scale(1.08); box-shadow: 0 0 12px #38bdf8; }
+            to { background-color: #38bdf8; color: black; transform: scale(0.95); box-shadow: 0 0 20px #7dd3fc; }
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #a855f7;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between items-center p-3 sm:p-5">
+
+    <!-- Header Section with Melodica Logo -->
+    <header class="w-full max-w-md flex justify-between items-center bg-slate-900/90 backdrop-blur border border-purple-500/30 p-3.5 sm:p-4 rounded-2xl shadow-xl mb-3">
+        <!-- Top Left: Melodica Brand SVG / Logo -->
+        <div class="flex items-center space-x-2 pl-1 overflow-visible">
+            <svg class="h-11 sm:h-12 w-auto overflow-visible" viewBox="0 0 340 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Outer Loop Lines -->
+                <path d="M 30 135 C 130 190, 260 145, 310 25" stroke="#f472b6" stroke-width="7" stroke-linecap="round" fill="none"/>
+                <path d="M 75 55 C 160 0, 275 10, 305 50" stroke="#a855f7" stroke-width="5" stroke-linecap="round" fill="none"/>
+                <!-- Melodica Text -->
+                <text x="15" y="108" font-family="'Plus Jakarta Sans', sans-serif" font-weight="900" font-size="82" fill="#ffffff">Mél</text>
+                <!-- Vinyl Disc Emblem -->
+                <g transform="translate(155, 68)">
+                    <circle cx="22" cy="22" r="22" fill="#0f766e"/>
+                    <circle cx="22" cy="22" r="15" fill="#042f2e"/>
+                    <circle cx="22" cy="22" r="7" fill="#f97316"/>
+                    <path d="M 7 22 A 15 15 0 0 1 37 22" stroke="#14b8a6" stroke-width="2.5" fill="none"/>
+                </g>
+                <text x="200" y="108" font-family="'Plus Jakarta Sans', sans-serif" font-weight="900" font-size="82" fill="#ffffff">dica</text>
+                <polygon points="46,108 50,100 54,108 50,116" fill="#f472b6"/>
+                <polygon points="285,45 288,39 291,45 288,51" fill="#a855f7"/>
+            </svg>
+        </div>
+
+        <div class="flex items-center space-x-2">
+            <button id="hintBtn" onclick="useHint()" title="Use Hint" class="w-9 h-9 rounded-xl bg-slate-800 text-amber-300 hover:bg-slate-700 flex items-center justify-center transition border border-slate-700 relative">
+                <i class="fa-solid fa-lightbulb"></i>
+                <span id="hintBadge" class="absolute -top-1 -right-1 bg-amber-500 text-slate-950 font-black text-[10px] w-4 h-4 rounded-full flex items-center justify-center">3</span>
+            </button>
+            <button id="soundToggleBtn" onclick="toggleSound()" class="w-9 h-9 rounded-xl bg-slate-800 text-purple-400 hover:bg-slate-700 flex items-center justify-center transition border border-slate-700">
+                <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+            </button>
+            <button onclick="restartGame()" class="w-9 h-9 rounded-xl bg-slate-800 text-pink-400 hover:bg-slate-700 flex items-center justify-center transition border border-slate-700">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Version Selector Dropdown -->
+    <div class="w-full max-w-md bg-slate-900/80 p-2 rounded-2xl border border-purple-500/20 mb-3 flex items-center justify-between">
+        <label for="versionSelect" class="text-xs font-bold text-slate-400 pl-2 flex items-center space-x-1.5">
+            <i class="fa-solid fa-layer-group text-purple-400"></i>
+            <span>Select Version:</span>
+        </label>
+        <select id="versionSelect" onchange="changeVersion(this.value)" class="bg-slate-800 text-slate-100 text-xs font-bold rounded-xl px-3 py-1.5 border border-slate-700 focus:outline-none focus:border-purple-500">
+            <option value="v1">Version 1: Pop Icons</option>
+            <option value="v2">Version 2: Legend Classics</option>
+            <option value="v3">Version 3: Modern Hits</option>
+        </select>
+    </div>
+
+    <!-- Game Stats Bar -->
+    <div class="w-full max-w-md grid grid-cols-2 gap-2 mb-3">
+        <!-- Target Goal -->
+        <div class="bg-slate-900/80 border border-purple-500/20 p-2 rounded-2xl text-center shadow-md">
+            <span class="text-[11px] font-bold text-slate-400 block mb-0.5">Target Progress</span>
+            <div class="flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-trophy text-amber-400 text-sm"></i>
+                <span id="targetProgress" class="text-base sm:text-lg font-black text-pink-400">0 / 3</span>
+            </div>
+        </div>
+        <!-- 5-Minute Timer -->
+        <div class="bg-slate-900/80 border border-purple-500/20 p-2 rounded-2xl text-center shadow-md">
+            <span class="text-[11px] font-bold text-slate-400 block mb-0.5">Time Remaining</span>
+            <div class="flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-stopwatch text-purple-400 text-sm"></i>
+                <span id="timerDisplay" class="text-base sm:text-lg font-black text-purple-300 font-mono">05:00</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instruction Bar -->
+    <div class="w-full max-w-md bg-purple-950/40 border border-purple-500/30 px-3 py-2 rounded-xl mb-3 text-center">
+        <p class="text-xs font-bold text-purple-200">
+            🔍 Discover <span class="text-pink-400">3 Singers</span> in the grid! Easy, Medium & Hard names included.
+        </p>
+    </div>
+
+    <!-- Main Word Search Grid -->
+    <main class="w-full max-w-md flex-1 flex flex-col justify-center items-center">
+        <div id="gridContainer" class="w-full bg-slate-900 p-2 sm:p-3 rounded-3xl shadow-2xl border border-purple-500/30 no-scroll relative select-none">
+            <div id="grid" class="grid gap-1 w-full max-w-full"></div>
+        </div>
+
+        <!-- Discovered Singers List -->
+        <div class="w-full mt-3 bg-slate-900/70 border border-purple-500/20 p-3 rounded-2xl shadow-md">
+            <h2 class="text-xs font-bold text-slate-400 mb-2 flex items-center justify-between">
+                <span><i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Discovered Singers:</span>
+                <span id="discoveredCount" class="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700/50">0 Found</span>
+            </h2>
+            <div id="discoveredList" class="flex flex-wrap gap-2 min-h-[38px] items-center">
+                <span id="emptyHint" class="text-xs text-slate-500 italic">Drag across letters to reveal names...</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer with Version Identifier -->
+    <footer class="w-full max-w-md text-center text-xs text-slate-500 py-2 mt-2 flex flex-col items-center space-y-1">
+        <div>Melodica • Singer Word Search Challenge</div>
+        <div id="versionIdBadge" class="bg-slate-900 px-3 py-0.5 rounded-full border border-slate-800 text-[11px] font-mono text-purple-400 font-bold">
+            Version: MEL-V1-POP
+        </div>
+    </footer>
+
+    <!-- Win Modal -->
+    <div id="winModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-slate-900 border border-purple-500/40 p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl transform scale-90 transition-transform duration-300" id="winCard">
+            <div class="w-16 h-16 bg-gradient-to-tr from-amber-400 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl text-slate-950 text-3xl font-black animate-bounce">
+                <i class="fa-solid fa-crown"></i>
+            </div>
+            <h2 class="text-2xl font-black text-white mb-1">You Win! 🎉</h2>
+            <p class="text-slate-300 text-sm mb-4">You discovered 3 singers before time ran out!</p>
+
+            <div class="bg-slate-950 rounded-2xl p-4 mb-5 border border-purple-500/20 space-y-2 text-sm">
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Time Taken:</span>
+                    <span id="winTime" class="font-extrabold text-purple-300 font-mono">00:00</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Singers Found:</span>
+                    <span id="winSingers" class="font-extrabold text-pink-400">3</span>
+                </div>
+            </div>
+
+            <button onclick="restartGame()" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-600 text-white font-extrabold text-base shadow-lg shadow-purple-600/40 hover:brightness-110 active:scale-95 transition">
+                Play Again 🔄
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="loseModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-slate-900 border border-red-500/40 p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl transform scale-90 transition-transform duration-300" id="loseCard">
+            <div class="w-16 h-16 bg-gradient-to-tr from-red-500 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl text-white text-3xl font-black">
+                <i class="fa-solid fa-hourglass-end"></i>
+            </div>
+            <h2 class="text-2xl font-black text-white mb-1">Time's Up! ⏰</h2>
+            <p class="text-slate-300 text-sm mb-4">5 minutes elapsed before finding 3 singers.</p>
+
+            <button onclick="restartGame()" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-extrabold text-base shadow-lg hover:brightness-110 active:scale-95 transition">
+                Try Again 🔄
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Logic -->
+    <script>
+        // Versions Configuration
+        const GAME_VERSIONS = {
+            v1: {
+                id: "MEL-V1-POP",
+                title: "Version 1: Pop Icons",
+                singers: [
+                    { name: "ADELE", display: "Adele", difficulty: "Easy", dir: [0, 1] },
+                    { name: "AMRDIAB", display: "Amr Diab", difficulty: "Easy", dir: [1, 0] },
+                    { name: "SHAKIRA", display: "Shakira", difficulty: "Medium", dir: [1, 1] },
+                    { name: "NANCY", display: "Nancy Ajram", difficulty: "Medium", dir: [0, 1] },
+                    { name: "KULTHUM", display: "Um Kulthum", difficulty: "Hard", dir: [1, -1] }
+                ]
+            },
+            v2: {
+                id: "MEL-V2-LEGEND",
+                title: "Version 2: Legend Classics",
+                singers: [
+                    { name: "FAIRUZ", display: "Fairuz", difficulty: "Easy", dir: [0, 1] },
+                    { name: "DRAKE", display: "Drake", difficulty: "Easy", dir: [1, 0] },
+                    { name: "BEYONCE", display: "Beyoncé", difficulty: "Medium", dir: [1, 1] },
+                    { name: "HAMAKI", display: "Hamaki", difficulty: "Medium", dir: [0, 1] },
+                    { name: "COLDPLAY", display: "Coldplay", difficulty: "Hard", dir: [-1, 1] }
+                ]
+            },
+            v3: {
+                id: "MEL-V3-HITS",
+                title: "Version 3: Modern Hits",
+                singers: [
+                    { name: "RIHANNA", display: "Rihanna", difficulty: "Easy", dir: [1, 0] },
+                    { name: "TAYLOR", display: "Taylor Swift", difficulty: "Easy", dir: [0, 1] },
+                    { name: "ELISSA", display: "Elissa", difficulty: "Medium", dir: [1, 1] },
+                    { name: "ANGHAM", display: "Angham", difficulty: "Medium", dir: [0, 1] },
+                    { name: "WEEKND", display: "The Weeknd", difficulty: "Hard", dir: [1, -1] }
+                ]
+            }
+        };
+
+        const COLOR_PALETTE = [
+            '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#06b6d4', '#f43f5e'
+        ];
+
+        const GRID_SIZE = 10;
+        const TARGET_WIN_COUNT = 3;
+        const TOTAL_SECONDS = 300; // 5 Minutes
+
+        let currentVersionKey = 'v1';
+        let grid = [];
+        let hiddenWordsInGrid = [];
+        let wordCellLocations = {}; 
+        let foundWords = new Set();
+        let selectedCells = [];
+        let wordColors = {};
+        
+        let isSelecting = false;
+        let startCell = null;
+        let hintsRemaining = 3;
+
+        let timerInterval = null;
+        let secondsRemaining = TOTAL_SECONDS;
+        let soundEnabled = true;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playBeep(freq = 440, type = 'sine', duration = 0.08) {
+            if (!soundEnabled) return;
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playWinSound() {
+            if (!soundEnabled) return;
+            const notes = [440, 554.37, 659.25, 880];
+            notes.forEach((freq, idx) => {
+                setTimeout(() => playBeep(freq, 'triangle', 0.18), idx * 90);
+            });
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            icon.className = soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-slate-500';
+        }
+
+        function changeVersion(versionKey) {
+            currentVersionKey = versionKey;
+            initGame();
+        }
+
+        function initGame() {
+            const verObj = GAME_VERSIONS[currentVersionKey];
+            document.getElementById('versionIdBadge').innerText = `Version: ${verObj.id}`;
+
+            grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(''));
+            foundWords.clear();
+            hiddenWordsInGrid = [];
+            wordCellLocations = {};
+            selectedCells = [];
+            wordColors = {};
+            hintsRemaining = 3;
+            document.getElementById('hintBadge').innerText = hintsRemaining;
+            secondsRemaining = TOTAL_SECONDS;
+
+            clearInterval(timerInterval);
+            updateTimerDisplay();
+
+            // Hide Modals
+            document.getElementById('winModal').classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('winCard').classList.add('scale-90');
+            document.getElementById('loseModal').classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('loseCard').classList.add('scale-90');
+
+            // Reset UI
+            document.getElementById('targetProgress').innerText = `0 / ${TARGET_WIN_COUNT}`;
+            document.getElementById('discoveredList').innerHTML = `<span id="emptyHint" class="text-xs text-slate-500 italic">Drag across letters to reveal names...</span>`;
+            document.getElementById('discoveredCount').innerText = `0 Found`;
+
+            placeSingers();
+            fillRandomLetters();
+            renderGrid();
+            startTimer();
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                secondsRemaining--;
+                updateTimerDisplay();
+
+                if (secondsRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    showLoseModal();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = String(Math.floor(secondsRemaining / 60)).padStart(2, '0');
+            const secs = String(secondsRemaining % 60).padStart(2, '0');
+            const timerEl = document.getElementById('timerDisplay');
+            timerEl.innerText = `${mins}:${secs}`;
+            
+            if (secondsRemaining <= 60) {
+                timerEl.classList.add('text-red-400', 'animate-pulse');
+            } else {
+                timerEl.classList.remove('text-red-400', 'animate-pulse');
+            }
+        }
+
+        function placeSingers() {
+            const currentVersion = GAME_VERSIONS[currentVersionKey];
+
+            currentVersion.singers.forEach((singerObj) => {
+                const word = singerObj.name;
+                let placed = false;
+                let attempts = 0;
+                
+                const possibleDirs = singerObj.dir ? [singerObj.dir, [0, 1], [1, 0]] : [[0, 1], [1, 0], [1, 1]];
+
+                while (!placed && attempts < 200) {
+                    attempts++;
+                    const dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+                    const startR = Math.floor(Math.random() * GRID_SIZE);
+                    const startC = Math.floor(Math.random() * GRID_SIZE);
+
+                    if (canPlace(word, startR, startC, dir)) {
+                        const cellCoords = [];
+                        for (let i = 0; i < word.length; i++) {
+                            const r = startR + i * dir[0];
+                            const c = startC + i * dir[1];
+                            grid[r][c] = word[i];
+                            cellCoords.push({ r, c });
+                        }
+                        placed = true;
+                        hiddenWordsInGrid.push(singerObj);
+                        wordCellLocations[singerObj.name] = cellCoords;
+                        wordColors[singerObj.name] = COLOR_PALETTE[hiddenWordsInGrid.length % COLOR_PALETTE.length];
+                    }
+                }
+            });
+        }
+
+        function canPlace(word, startR, startC, dir) {
+            for (let i = 0; i < word.length; i++) {
+                const r = startR + i * dir[0];
+                const c = startC + i * dir[1];
+
+                if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) return false;
+                if (grid[r][c] !== '' && grid[r][c] !== word[i]) return false;
+            }
+            return true;
+        }
+
+        function fillRandomLetters() {
+            const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === '') {
+                        grid[r][c] = alpha[Math.floor(Math.random() * alpha.length)];
+                    }
+                }
+            }
+        }
+
+        function renderGrid() {
+            const gridEl = document.getElementById('grid');
+            gridEl.style.gridTemplateColumns = `repeat(${GRID_SIZE}, minmax(0, 1fr))`;
+            gridEl.innerHTML = '';
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell flex items-center justify-center font-black text-xs sm:text-base bg-slate-800/80 text-slate-200 rounded-xl cursor-pointer transition-all border border-slate-700/50 select-none';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.innerText = grid[r][c];
+
+                    gridEl.appendChild(cell);
+                }
+            }
+
+            setupControls();
+        }
+
+        function setupControls() {
+            const container = document.getElementById('gridContainer');
+
+            container.onmousedown = (e) => {
+                const cell = getCell(e.clientX, e.clientY);
+                if (cell) startSelection(cell);
+            };
+
+            window.onmousemove = (e) => {
+                if (!isSelecting) return;
+                const cell = getCell(e.clientX, e.clientY);
+                if (cell) updateSelection(cell);
+            };
+
+            window.onmouseup = () => {
+                if (isSelecting) endSelection();
+            };
+
+            container.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                const cell = getCell(touch.clientX, touch.clientY);
+                if (cell) startSelection(cell);
+            }, { passive: true });
+
+            container.addEventListener('touchmove', (e) => {
+                if (!isSelecting) return;
+                const touch = e.touches[0];
+                const cell = getCell(touch.clientX, touch.clientY);
+                if (cell) updateSelection(cell);
+            }, { passive: true });
+
+            container.addEventListener('touchend', () => {
+                if (isSelecting) endSelection();
+            });
+        }
+
+        function getCell(x, y) {
+            const el = document.elementFromPoint(x, y);
+            if (el && el.classList.contains('grid-cell')) {
+                return { r: parseInt(el.dataset.row), c: parseInt(el.dataset.col), element: el };
+            }
+            return null;
+        }
+
+        function startSelection(cell) {
+            isSelecting = true;
+            startCell = cell;
+            selectedCells = [cell];
+            highlightSelection();
+            playBeep(420, 'sine', 0.05);
+        }
+
+        function updateSelection(currentCell) {
+            if (!startCell) return;
+
+            const dr = currentCell.r - startCell.r;
+            const dc = currentCell.c - startCell.c;
+            const absR = Math.abs(dr);
+            const absC = Math.abs(dc);
+
+            if (absR === 0 || absC === 0 || absR === absC) {
+                const stepR = dr === 0 ? 0 : dr / absR;
+                const stepC = dc === 0 ? 0 : dc / absC;
+                const steps = Math.max(absR, absC);
+
+                const newSel = [];
+                for (let i = 0; i <= steps; i++) {
+                    const r = startCell.r + i * stepR;
+                    const c = startCell.c + i * stepC;
+                    const el = document.querySelector(`.grid-cell[data-row="${r}"][data-col="${c}"]`);
+                    newSel.push({ r, c, element: el });
+                }
+
+                if (newSel.length !== selectedCells.length) {
+                    playBeep(450 + newSel.length * 25, 'sine', 0.04);
+                }
+
+                selectedCells = newSel;
+                highlightSelection();
+            }
+        }
+
+        function highlightSelection() {
+            document.querySelectorAll('.grid-cell.selected').forEach(el => el.classList.remove('selected'));
+            selectedCells.forEach(cell => {
+                if (cell.element) cell.element.classList.add('selected');
+            });
+        }
+
+        function endSelection() {
+            isSelecting = false;
+
+            const forward = selectedCells.map(c => grid[c.r][c.c]).join('');
+            const reversed = forward.split('').reverse().join('');
+
+            const matchedSinger = hiddenWordsInGrid.find(w => w.name === forward || w.name === reversed);
+
+            if (matchedSinger && !foundWords.has(matchedSinger.name)) {
+                handleSingerFound(matchedSinger, selectedCells);
+            } else {
+                document.querySelectorAll('.grid-cell.selected').forEach(el => el.classList.remove('selected'));
+            }
+
+            selectedCells = [];
+            startCell = null;
+        }
+
+        function handleSingerFound(singerObj, cells) {
+            foundWords.add(singerObj.name);
+            const color = wordColors[singerObj.name] || '#ec4899';
+
+            cells.forEach(cell => {
+                if (cell.element) {
+                    cell.element.classList.remove('selected', 'hint-pulse');
+                    cell.element.classList.add('found');
+                    cell.element.style.backgroundColor = color;
+                    cell.element.style.color = '#ffffff';
+                }
+            });
+
+            const hint = document.getElementById('emptyHint');
+            if (hint) hint.remove();
+
+            const badge = document.createElement('div');
+            badge.className = 'px-3 py-1 rounded-xl text-xs font-bold text-white shadow-md flex items-center space-x-1.5 animate-bounce';
+            badge.style.backgroundColor = color;
+            badge.innerHTML = `
+                <i class="fa-solid fa-music text-[10px]"></i>
+                <span>${singerObj.display}</span>
+            `;
+            document.getElementById('discoveredList').appendChild(badge);
+
+            document.getElementById('targetProgress').innerText = `${foundWords.size} / ${TARGET_WIN_COUNT}`;
+            document.getElementById('discoveredCount').innerText = `${foundWords.size} Found`;
+
+            playWinSound();
+
+            if (foundWords.size >= TARGET_WIN_COUNT) {
+                setTimeout(showWinModal, 500);
+            }
+        }
+
+        function useHint() {
+            if (hintsRemaining <= 0) return;
+
+            const unFound = hiddenWordsInGrid.filter(w => !foundWords.has(w.name));
+            if (unFound.length === 0) return;
+
+            const targetWord = unFound[Math.floor(Math.random() * unFound.length)];
+            const coords = wordCellLocations[targetWord.name];
+            if (!coords || coords.length === 0) return;
+
+            const firstPoint = coords[0];
+            const cellEl = document.querySelector(`.grid-cell[data-row="${firstPoint.r}"][data-col="${firstPoint.c}"]`);
+
+            if (cellEl) {
+                cellEl.classList.add('hint-pulse');
+                playBeep(700, 'sine', 0.2);
+
+                setTimeout(() => {
+                    cellEl.classList.remove('hint-pulse');
+                }, 2500);
+
+                hintsRemaining--;
+                document.getElementById('hintBadge').innerText = hintsRemaining;
+            }
+        }
+
+        function showWinModal() {
+            clearInterval(timerInterval);
+
+            const elapsedSeconds = TOTAL_SECONDS - secondsRemaining;
+            const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+            const secs = String(elapsedSeconds % 60).padStart(2, '0');
+
+            document.getElementById('winTime').innerText = `${mins}:${secs}`;
+            document.getElementById('winSingers').innerText = foundWords.size;
+
+            if (typeof confetti === 'function') {
+                confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+            }
+
+            const modal = document.getElementById('winModal');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('winCard').classList.remove('scale-90');
+        }
+
+        function showLoseModal() {
+            const modal = document.getElementById('loseModal');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('loseCard').classList.remove('scale-90');
+        }
+
+        function restartGame() {
+            initGame();
+        }
+
+        window.onload = () => {
+            initGame();
+        };
+    </script>
+</body>
+</html>
